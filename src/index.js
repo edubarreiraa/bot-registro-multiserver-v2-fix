@@ -1,6 +1,13 @@
+/* Arquivo legado: mantido temporariamente para compatibilidade com inicializacoes antigas.
+ * O ponto de entrada oficial e src/bootstrap.js.
+ */
+require('./bootstrap');
+/*
 require('dotenv').config();
 const {Client,GatewayIntentBits,Partials,REST,Routes,SlashCommandBuilder,PermissionFlagsBits,ActionRowBuilder,ButtonBuilder,ButtonStyle,ModalBuilder,TextInputBuilder,TextInputStyle,StringSelectMenuBuilder,RoleSelectMenuBuilder,ChannelSelectMenuBuilder,ChannelType,EmbedBuilder}=require('discord.js');
 const store=require('./storage');
+const logger=require('./utils/logger');
+const registrationSessions=require('./modules/registration/session-store');
 const token=process.env.DISCORD_TOKEN;
 if(!token){console.error('Configure DISCORD_TOKEN no .env/ambiente');process.exit(1);}
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers],partials:[Partials.GuildMember]});
@@ -23,7 +30,7 @@ new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('
 {label:'Nome | RG',value:'format_nome_rg'},{label:'RG | Nome',value:'format_rg_nome'},{label:'Nome [RG]',value:'format_nome_rg_brackets'}))
 ];}
 function defaultCfg(){return {panelChannelId:null,allowedRoles:[],nicknameFormat:'{nome} | {rg}'};}
-client.once('ready',async()=>{console.log(`Online: ${client.user.tag}`);try{await new REST({version:'10'}).setToken(token).put(Routes.applicationCommands(client.user.id),{body:commands});console.log('Comandos registrados.');}catch(e){console.error('Erro ao registrar comandos',e);}});
+client.once('ready',async()=>{logger.info('Bot conectado.',{user:client.user.tag});try{await new REST({version:'10'}).setToken(token).put(Routes.applicationCommands(client.user.id),{body:commands});logger.info('Comandos globais registrados.');}catch(e){logger.error('Erro ao registrar comandos.',{error:e.message});}});
 client.on('interactionCreate',async i=>{try{
  if(i.isChatInputCommand()){
   if(!admin(i))return i.reply({content:'Somente administradores podem usar este comando.',ephemeral:true});
@@ -85,11 +92,15 @@ Após concluir, o bot ajustará seu apelido e seu cargo automaticamente.`);
   const name=i.fields.getTextInputValue('reg_name').trim(),rg=i.fields.getTextInputValue('reg_rg').trim();
   const opts=cfg.allowedRoles.map(id=>{const role=i.guild.roles.cache.get(id);return role?{label:role.name.slice(0,100),value:id}:null;}).filter(Boolean);
   if(!opts.length)return i.reply({content:'Cargos configurados nao encontrados. Avise a administracao.',ephemeral:true});
-  const menu=new StringSelectMenuBuilder().setCustomId(`choose_role|${encodeURIComponent(name)}|${encodeURIComponent(rg)}`).setPlaceholder('Selecione seu cargo').addOptions(opts).setMinValues(1).setMaxValues(1);
+  const sessionId=registrationSessions.create({guildId:i.guildId,userId:i.user.id,name,rg});
+  const menu=new StringSelectMenuBuilder().setCustomId(`choose_role:${sessionId}`).setPlaceholder('Selecione seu cargo').addOptions(opts).setMinValues(1).setMaxValues(1);
   return i.reply({content:'Escolha seu cargo:',components:[new ActionRowBuilder().addComponents(menu)],ephemeral:true});
  }
- if(i.isStringSelectMenu()&&i.customId.startsWith('choose_role|')){
-  const cfg=store.get(i.guildId),parts=i.customId.split('|'),name=decodeURIComponent(parts[1]),rg=decodeURIComponent(parts[2]),roleId=i.values[0];
+ if(i.isStringSelectMenu()&&i.customId.startsWith('choose_role:')){
+  const sessionId=i.customId.slice('choose_role:'.length);
+  const session=registrationSessions.get(sessionId,i.guildId,i.user.id);
+  if(!session)return i.reply({content:'Esta etapa do registro expirou. Inicie o registro novamente.',ephemeral:true});
+  const {name,rg}=session,cfg=store.get(i.guildId),roleId=i.values[0];
   if(!cfg?.allowedRoles?.includes(roleId))return i.reply({content:'Cargo nao permitido. Reinicie o registro.',ephemeral:true});
   const member=await i.guild.members.fetch(i.user.id),role=i.guild.roles.cache.get(roleId),botTop=i.guild.members.me.roles.highest.position;
   if(!role||role.position>=botTop)return i.reply({content:'O bot nao consegue gerenciar esse cargo. Avise um administrador.',ephemeral:true});
@@ -97,7 +108,16 @@ Após concluir, o bot ajustará seu apelido e seu cargo automaticamente.`);
   await member.setNickname(nickname,'Registro realizado pelo bot');
   const remove=cfg.allowedRoles.filter(id=>id!==roleId&&member.roles.cache.has(id));if(remove.length)await member.roles.remove(remove);
   await member.roles.add(roleId);
+  registrationSessions.remove(sessionId);
   return i.update({content:`Registro concluido! Apelido: **${nickname}**. Cargo **${role.name}** atribuido.`,components:[]});
  }
-}catch(err){console.error(err);if(i.isRepliable()&&!i.replied&&!i.deferred)await i.reply({content:'Erro durante a interacao. Verifique as permissoes do bot.',ephemeral:true}).catch(()=>{});}});
+}catch(err){
+ logger.error('Erro ao processar interacao.',{error:err.message,interactionId:i.id,guildId:i.guildId,userId:i.user?.id});
+ if(!i.isRepliable())return;
+ const message={content:'Erro durante a interacao. Verifique as permissoes do bot.',ephemeral:true,components:[]};
+ if(i.deferred)return i.editReply(message).catch(()=>{});
+ if(!i.replied)return i.reply(message).catch(()=>{});
+ return i.followUp(message).catch(()=>{});
+}});
 client.login(token);
+*/
